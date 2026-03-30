@@ -1,0 +1,16 @@
+---
+title: "01 Setup"
+output: html_document
+---
+
+```{r}
+packages <- c("tidyverse", "lubridate", "forecast", "readr", "readxl")
+to_install <- packages[!packages %in% installed.packages()[, "Package"]]
+if (length(to_install) > 0) install.packages(to_install)
+
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(readr)
+library(readxl)
+```

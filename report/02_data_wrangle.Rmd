@@ -1,0 +1,26 @@
+---
+title: "02 Data Wrangle"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(readr)
+library(readxl)
+```
+
+## Import data
+
+```{r}
+# Replace extensions if needed after you confirm the real file types
+load_raw <- read_excel("data_raw/load.xlsx")
+temp_raw <- read_excel("data_raw/temperature.xlsx")
+rh_raw   <- read_excel("data_raw/relative_humidity.xlsx")
+template <- read_csv("data_raw/submission_template.csv")
+
+glimpse(load_raw)
+glimpse(temp_raw)
+glimpse(rh_raw)
+glimpse(template)
+```

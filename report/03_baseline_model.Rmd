@@ -1,0 +1,18 @@
+---
+title: "03 Baseline Model"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(readr)
+library(readxl)
+```
+
+## Baseline model placeholder
+
+```{r}
+# We will add the first forecasting model here after wrangling the data.
+```
