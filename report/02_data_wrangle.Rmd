@@ -3,24 +3,78 @@ title: "02 Data Wrangle"
 output: html_document
 ---
 
-```{r}
+```{r setup, message=FALSE, warning=FALSE}
+packages <- c("tidyverse", "lubridate", "readr", "readxl")
+
+to_install <- packages[!packages %in% installed.packages()[, "Package"]]
+if (length(to_install) > 0) install.packages(to_install)
+
 library(tidyverse)
 library(lubridate)
 library(readr)
 library(readxl)
 ```
 
-## Import data
+```{r}
+load_raw <- read_excel("../data_raw/load.xlsx")
+temp_raw <- read_excel("../data_raw/temperature.xlsx")
+rh_raw   <- read_excel("../data_raw/relative_humidity.xlsx")
+template <- read_csv("../data_raw/submission_template.csv", show_col_types = FALSE)
+```
 
 ```{r}
-# Replace extensions if needed after you confirm the real file types
-load_raw <- read_excel("data_raw/load.xlsx")
-temp_raw <- read_excel("data_raw/temperature.xlsx")
-rh_raw   <- read_excel("data_raw/relative_humidity.xlsx")
-template <- read_csv("data_raw/submission_template.csv")
+cat("load_raw: ", dim(load_raw)[1], "rows x", dim(load_raw)[2], "cols\n")
+cat("temp_raw: ", dim(temp_raw)[1], "rows x", dim(temp_raw)[2], "cols\n")
+cat("rh_raw: ", dim(rh_raw)[1], "rows x", dim(rh_raw)[2], "cols\n")
+cat("template: ", dim(template)[1], "rows x", dim(template)[2], "cols\n")
+```
 
-glimpse(load_raw)
-glimpse(temp_raw)
-glimpse(rh_raw)
-glimpse(template)
+```{r}
+names(load_raw)
+names(temp_raw)
+names(rh_raw)
+names(template)
+```
+```{r}
+head(load_raw)
+head(temp_raw)
+head(rh_raw)
+head(template)
+```
+
+```{r}
+# Daily load: average h1-h24 for each date
+load_daily <- load_raw %>%
+  mutate(date = as.Date(date)) %>%
+  rowwise() %>%
+  mutate(load_daily = mean(c_across(starts_with("h")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  select(date, load_daily)
+
+# Daily temperature: average across stations, then across hours in a day
+temp_daily <- temp_raw %>%
+  mutate(date = as.Date(date)) %>%
+  rowwise() %>%
+  mutate(temp_hourly_avg = mean(c_across(starts_with("t_ws")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(date) %>%
+  summarise(temp_daily = mean(temp_hourly_avg, na.rm = TRUE), .groups = "drop")
+
+# Daily humidity: average across stations, then across hours in a day
+rh_daily <- rh_raw %>%
+  mutate(date = as.Date(date)) %>%
+  rowwise() %>%
+  mutate(rh_hourly_avg = mean(c_across(starts_with("rh_ws")), na.rm = TRUE)) %>%
+  ungroup() %>%
+  group_by(date) %>%
+  summarise(rh_daily = mean(rh_hourly_avg, na.rm = TRUE), .groups = "drop")
+
+# Merge all daily data
+daily_data <- load_daily %>%
+  left_join(temp_daily, by = "date") %>%
+  left_join(rh_daily, by = "date")
+
+# Quick check
+head(daily_data)
+glimpse(daily_data)
 ```
