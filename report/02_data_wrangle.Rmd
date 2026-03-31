@@ -77,4 +77,9 @@ daily_data <- load_daily %>%
 # Quick check
 head(daily_data)
 glimpse(daily_data)
+
+```
+```{r}
+# Exporting data
+write_csv(daily_data, "../data_process/daily_data.csv")
 ```

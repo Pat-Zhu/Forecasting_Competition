@@ -10,9 +10,80 @@ library(forecast)
 library(readr)
 library(readxl)
 ```
-
-## Baseline model placeholder
-
+## Preparing Data
 ```{r}
-# We will add the first forecasting model here after wrangling the data.
+# Importing data
+daily_data <- read_csv("../data_clean/daily_data.csv")
+template   <- read_csv("../data_raw/submission_template.csv")
+
+daily_data <- daily_data %>%
+  mutate(date = as.Date(date)) %>%
+  arrange(date)
+
+# Transforming data into time series object
+ts_load <- ts(
+  daily_data$load_daily,
+  start = c(year(min(daily_data$date)), yday(min(daily_data$date))),
+  frequency = 7
+)
 ```
+
+## Initial Plot
+```{r}
+TS_Plot <- ggplot(daily_data, aes(x = date, y = load_daily)) +
+  geom_line() +
+  labs(
+    title = "Daily Electricity Load",
+    x = "Date",
+    y = "Load"
+  )
+plot(TS_Plot)
+
+# ACF and PACF plots
+par(mfrow = c(1, 2))
+Acf(daily_data$load_daily, lag.max = 40, main = "ACF of Daily Load")
+Pacf(daily_data$load_daily, lag.max = 40, main = "PACF of Daily Load")
+par(mfrow = c(1, 1))
+```
+## Decomposing the time series
+```{r}
+decompose_load <- decompose(ts_load, type = "additive")
+plot(decompose_load)
+
+#Creating non-seasonal load time series because some models can't handle seasonality
+deseasonal_load <- seasadj(decompose_load)
+```
+
+## Forecasting with Naive methods
+```{r}
+h <- nrow(template)
+
+# Model 1: Arithmetic mean
+MEAN_fit <- meanf(ts_load, h = h)
+plot(MEAN_fit)
+
+# Model 2: Naive
+NAIVE_fit <- naive(ts_load, h = h)
+plot(NAIVE_fit)
+
+# Model 3: Seasonal Naive
+SNAIVE_fit <- snaive(ts_load, h = h)
+plot(SNAIVE_fit)
+
+#Model summaries
+summary(MEAN_fit)
+summary(NAIVE_fit)
+summary(SNAIVE_fit)
+```
+
+## Baseline Model 
+We use the seasonal naive model as our baseline because electricity demand exhibits a strong weekly pattern. By setting the frequency to 7, the model captures this seasonality by using the value from the same day in the previous week as the forecast. This provides a simple but meaningful benchmark for more advanced models.
+```{r}
+baseline_forecast <- as.numeric(SNAIVE_fit$mean)
+
+baseline_model <- template %>%
+  mutate(load_daily = baseline_forecast)
+
+head(baseline_model)
+```
+
