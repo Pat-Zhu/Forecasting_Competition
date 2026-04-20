@@ -1,0 +1,90 @@
+---
+title: "05_advanced_model_2"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(readr)
+library(readxl)
+```
+## Preparing Data
+```{r}
+# Importing data
+daily_data <- read_csv("../data_process/daily_data.csv")
+template   <- read_csv("../data_raw/submission_template.csv")
+
+daily_data <- daily_data %>%
+  mutate(date = as.Date(date)) %>%
+  arrange(date)
+
+# Transforming data into time series object
+ts_load <- ts(
+  daily_data$load_daily,
+  frequency = 7)
+
+h <- nrow(template)
+```
+
+##Advanced ARIMA Models
+```{r}
+fit_arima_strong <- auto.arima(
+  ts_load,
+  seasonal = TRUE,
+  stepwise = FALSE,
+  approximation = FALSE
+)
+
+summary(fit_arima_strong)
+
+fc_arima_strong <- forecast(fit_arima_strong, h = h)
+```
+## ARIMA with Drift
+```{r}
+fit_arima_drift <- auto.arima(
+  ts_load,
+  seasonal = TRUE,
+  allowdrift = TRUE,
+  stepwise = FALSE,
+  approximation = FALSE
+)
+
+summary(fit_arima_drift)
+
+fc_arima_drift <- forecast(fit_arima_drift, h = h)
+```
+
+## ARIMA with Fourier terms
+```{r}
+fit_fourier <- auto.arima(
+  ts_load,
+  xreg = fourier(ts_load, K = 2),
+  seasonal = FALSE,
+  stepwise = FALSE,
+  approximation = FALSE
+)
+
+summary(fit_fourier)
+
+fc_fourier <- forecast(
+  fit_fourier,
+  xreg = fourier(ts_load, K = 2, h = h)
+)
+```
+
+## Final Model
+```{r}
+pred_final <- (as.numeric(fc_arima_strong$mean) +
+              as.numeric(fc_arima_drift$mean)+
+              as.numeric(fc_fourier$mean))/3
+
+advanced_model <- template %>%
+  mutate(load = pred_final)
+
+# Exporting data
+write_csv(advanced_model, "../data_process/advanced_model_3.csv")
+```
+
+

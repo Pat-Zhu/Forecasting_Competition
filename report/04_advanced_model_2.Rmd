@@ -1,0 +1,90 @@
+---
+title: "04_advanced_model"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(readr)
+library(readxl)
+library(Metrics)
+```
+
+## Preparing Data
+```{r}
+# Importing data
+daily_data <- read_csv("../data_process/daily_data.csv")
+template   <- read_csv("../data_raw/submission_template.csv")
+
+daily_data <- daily_data %>%
+  mutate(date = as.Date(date)) %>%
+  arrange(date) %>%
+  mutate(
+    temp_lag1 = lag(temp_daily, 1),
+    temp_lag1 = coalesce(temp_lag1, temp_daily),
+    load_lag1 = lag(load_daily, 1),
+    load_lag7 = lag(load_daily, 7)
+  )
+```
+## Advanced Model
+```{r}
+train_df <- daily_data %>%
+  filter(date <= as.Date("2011-05-31"))
+
+valid_df <- daily_data %>%
+  filter(date >= as.Date("2011-06-01"),
+         date <= as.Date("2011-06-30"))
+
+h <- nrow(template)
+
+ts_train <- ts(train_df$load_daily, frequency = 7)
+
+
+# ARIMA
+fit_arima <- auto.arima(ts_train)
+fc_arima  <- forecast(fit_arima, h = h)
+
+# ETS
+fit_ets <- ets(ts_train)
+fc_ets  <- forecast(fit_ets, h = h)
+
+# Fourier K=2
+fit_k2 <- auto.arima(ts_train, xreg = fourier(ts_train, K = 2))
+fc_k2  <- forecast(fit_k2, xreg = fourier(ts_train, K = 2, h = h))
+
+# SNAIVE（baseline）
+fit_snaive <- snaive(ts_train, h = h)
+```
+
+## MAPE comparison
+```{r}
+mape <- function(actual, pred) {
+  mean(abs((actual - pred) / pmax(actual, 1e-8)), na.rm = TRUE) * 100}
+
+results <- tibble(
+  model = c("arima", "ets", "fourier_k2", "snaive"),
+  mape = c(
+    mape(valid_df$load_daily, as.numeric(fc_arima$mean)),
+    mape(valid_df$load_daily, as.numeric(fc_ets$mean)),
+    mape(valid_df$load_daily, as.numeric(fc_k2$mean)),
+    mape(valid_df$load_daily, as.numeric(fit_snaive$mean))
+  ))
+
+results %>% arrange(mape)
+```
+
+#Advanced model Output
+```{r}
+pred_final <- as.numeric(fc_arima$mean)
+
+advanced_model <- template %>%
+  mutate(load = pred_final)
+
+# Exporting data
+write_csv(advanced_model, "../data_process/advanced_model_2.csv")
+```
+
+
+

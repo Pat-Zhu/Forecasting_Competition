@@ -1,0 +1,63 @@
+---
+title: "04_advanced_model_1.1"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(forecast)
+library(readr)
+library(readxl)
+```
+## Preparing Data
+```{r}
+# Importing data
+daily_data <- read_csv("../data_process/daily_data.csv")
+template   <- read_csv("../data_raw/submission_template.csv")
+
+daily_data <- daily_data %>%
+  mutate(date = as.Date(date)) %>%
+  arrange(date)
+
+# Transforming data into time series object
+ts_load <- ts(
+  daily_data$load_daily,
+  start = c(year(min(daily_data$date)), yday(min(daily_data$date))),
+  frequency = 7
+)
+```
+
+```{r}
+h <- nrow(template)
+
+#ETS
+fit_ets <- ets(ts_load)
+fc_ets <- forecast(fit_ets, h = h)
+summary(fit_ets)
+
+#Advanced ETS
+fit_ets1 <- ets(ts_load, model = "AAA")
+fit_ets2 <- ets(ts_load, model = "AAN")
+fit_ets3 <- ets(ts_load, model = "MAM")
+fit_ets4 <- ets(ts_load, model = "MAA")
+
+accuracy(forecast(fit_ets1, h = h))
+accuracy(forecast(fit_ets2, h = h))
+accuracy(forecast(fit_ets3, h = h))
+accuracy(forecast(fit_ets4, h = h))
+
+fc_ets1 <- forecast(fit_ets1, h = h)
+```
+
+#Advanced model Output
+```{r}
+pred_final <- as.numeric(fc_ets1$mean)
+
+advanced_model <- template %>%
+  mutate(load = pred_final)
+
+# Exporting data
+write_csv(advanced_model, "../data_process/advanced_model_1.1.csv")
+```
+

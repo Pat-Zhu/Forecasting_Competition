@@ -13,7 +13,7 @@ library(readxl)
 ## Preparing Data
 ```{r}
 # Importing data
-daily_data <- read_csv("../data_clean/daily_data.csv")
+daily_data <- read_csv("../data_process/daily_data.csv")
 template   <- read_csv("../data_raw/submission_template.csv")
 
 daily_data <- daily_data %>%
@@ -82,8 +82,12 @@ We use the seasonal naive model as our baseline because electricity demand exhib
 baseline_forecast <- as.numeric(SNAIVE_fit$mean)
 
 baseline_model <- template %>%
-  mutate(load_daily = baseline_forecast)
+  mutate(load = baseline_forecast)
 
 head(baseline_model)
+```
+```{r}
+# Exporting data
+write_csv(baseline_model, "../data_process/baseline_model.csv")
 ```
 
