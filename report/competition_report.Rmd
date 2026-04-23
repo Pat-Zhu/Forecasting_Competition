@@ -1,0 +1,368 @@
+---
+title: "Lastname1_Lastname2_CompetitionReport_S26"
+author: "Your Name; Teammate Name"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+
+library(tidyverse)
+library(lubridate)
+library(readr)
+library(readxl)
+library(forecast)
+library(knitr)
+library(kableExtra)
+```
+
+
+
+---
+
+# Introduction
+
+The objective of this forecasting competition was to predict daily residential electricity demand for July 2011 using historical electricity load data and nearby weather observations. The available dataset contained hourly electricity demand, temperature, and relative humidity measurements spanning multiple years, and the competition evaluation metric was Mean Absolute Percentage Error (MAPE).
+
+This project was designed to compare baseline and advanced time series forecasting methods under a common validation framework. The overall workflow consisted of transforming hourly observations into daily series, constructing time series objects appropriate for multiple seasonal patterns, evaluating several competing forecasting models on a held-out validation period, and retraining the selected model on the full available history to generate the final Kaggle submission.
+
+The primary goal of the analysis was not only to improve on a simple benchmark model, but also to develop a forecasting workflow that was transparent, reproducible, and consistent with the competition requirements.
+
+---
+
+# GitHub Repository
+
+The complete code, intermediate outputs, and report materials for this project are available in the team GitHub repository:
+
+**[Insert your GitHub repository link here]**
+
+The repository includes scripts for data wrangling, baseline forecasting, advanced forecasting models, and final report preparation.
+
+---
+
+# Data and Preprocessing
+
+The raw competition data were provided at an hourly frequency and included three main variables: electricity demand, temperature, and relative humidity. Because the forecasting target was daily load, the hourly observations were aggregated to the daily level prior to model fitting. For each day, the 24 hourly observations were summarized using daily averages, producing a daily time series suitable for medium-horizon forecasting.
+
+After aggregation, the resulting daily dataset was cleaned, ordered chronologically, and converted into a time series object. Since daily electricity demand may contain more than one seasonal pattern, especially weekly and annual structure, the final modeling workflow used a multiple-seasonal time series representation rather than a single-season `ts()` object.
+
+```{r}
+daily_data <- read_csv("../data_process/daily_data.csv") %>%
+  mutate(date = as.Date(date)) %>%
+  arrange(date)
+
+head(daily_data)
+```
+
+The preprocessing step was necessary to ensure consistency across all candidate models and to make the validation and final forecasting steps directly comparable.
+
+# Validation Strategy
+
+To ensure that model comparison reflected the competition guidelines, the data were divided into a training period and a validation period. The training set included observations from 2005-01-01 through 2010-06-30, and the validation set included observations from 2010-07-01 through 2010-07-31. This design allowed each model to be evaluated on a realistic one-month forecasting horizon before being retrained on the full available history.
+The daily load series was represented using an msts() object with weekly and annual seasonal periods. This was chosen because electricity demand commonly exhibits short-cycle weekly patterns as well as broader long-term seasonal variation.
+
+```{r}
+train <- daily_data %>%
+  filter(date >= as.Date("2005-01-01"),
+         date <= as.Date("2010-06-30"))
+
+valid <- daily_data %>%
+  filter(date >= as.Date("2010-07-01"),
+         date <= as.Date("2010-07-31"))
+
+y_train <- msts(train$load_daily, seasonal.periods = c(7, 365.25))
+h <- nrow(valid)
+
+mape <- function(actual, pred) {
+  mean(abs((actual - pred) / pmax(actual, 1e-8)), na.rm = TRUE) * 100
+}
+```
+
+Model performance was assessed using Mean Absolute Percentage Error (MAPE), which was also the official competition metric. Lower MAPE values indicate more accurate forecasts.
+
+#Candidate Models
+Five forecasting approaches were retained in the final report. These models were selected because they represented a reasonable range of baseline, classical exponential smoothing, autoregressive, seasonal, and ensemble forecasting strategies.
+
+1. TBATS(text to be modified)
+The seasonal naive model was used as the benchmark forecast. Because daily electricity demand often follows a strong weekly pattern, this model predicts each day using the value observed on the corresponding day of the previous week. Despite its simplicity, seasonal naive forecasting provides an important reference point for judging whether more sophisticated methods offer a meaningful improvement.
+
+```{r}
+fit_tbats <- tbats(y_train)
+fc_tbats <- forecast(fit_tbats, h = h)
+mape_tbats <- mape(valid$load_daily, as.numeric(fc_tbats$mean))
+mape_tbats
+```
+
+The seasonal naive model achieved a validation MAPE of [INSERT SNAIVE MAPE]. As expected, it captured short-term weekly repetition reasonably well, but it was limited in its ability to adapt to trend changes or more complex seasonal behavior.
+
+2. ETS Model
+The ETS model was used to capture level, trend, and seasonal components through exponential smoothing. This class of models is widely used in applied forecasting because it is flexible, interpretable, and often performs well for business and energy demand data.
+
+```{r}
+fit_ets <- ets(y_train)
+fc_ets <- forecast(fit_ets, h = h)
+mape_ets <- mape(valid$load_daily, as.numeric(fc_ets$mean))
+mape_ets
+```
+
+The ETS model produced a validation MAPE of [INSERT ETS MAPE]. Relative to the baseline, this model [performed better / performed similarly / performed worse], suggesting that smoothing-based estimation [was / was not] able to capture the dominant structure in the series more effectively than a purely seasonal benchmark.
+
+3. STLF_ETS(text to be modified)
+An automatic ARIMA specification was used to model the serial dependence structure of the daily load series. ARIMA models are useful when autocorrelation plays a major role in the evolution of the series and when stochastic structure is more important than deterministic decomposition alone.
+
+```{r}
+y_train_weekly <- ts(train$load_daily, frequency = 7)
+
+fc_stlf_ets <- stlf(
+  y_train_weekly,
+  h = h,
+  method = "ets",
+  lambda = "auto",
+  biasadj = TRUE
+)
+
+mape_stlf_ets <- mape(valid$load_daily, as.numeric(fc_stlf_ets$mean))
+mape_stlf_ets
+```
+
+The ARIMA model achieved a validation MAPE of [INSERT ARIMA MAPE]. This result indicated that explicitly modeling autocorrelation improved forecast quality [to some extent / substantially / only marginally] compared with the simpler benchmark models.
+
+4. ARIMA with Fourier Terms
+To better represent multiple seasonalities, an ARIMA model with Fourier terms was also considered. Fourier terms provide a parsimonious way to capture repeating cyclical structure without requiring a large number of seasonal parameters. This is particularly useful for daily demand data, where both weekly and longer-term seasonal variation may be present.
+
+```{r}
+fit_fourier <- auto.arima(
+  y_train,
+  xreg = fourier(y_train, K = c(2, 5)),
+  seasonal = FALSE,
+  stepwise = FALSE,
+  approximation = FALSE
+)
+
+fc_fourier <- forecast(
+  fit_fourier,
+  xreg = fourier(y_train, K = c(2, 5), h = h)
+)
+
+mape_fourier <- mape(valid$load_daily, as.numeric(fc_fourier$mean))
+mape_fourier
+```
+
+The ARIMA-Fourier model obtained a validation MAPE of [INSERT FOURIER MAPE]. Among the individual models, this approach [ranked first / ranked near the top / showed competitive performance], which suggests that explicitly accounting for multiple seasonal patterns improved forecast accuracy.
+
+5. Ensemble Model
+The final candidate model was a simple ensemble created by averaging forecasts from multiple strong-performing individual models. Forecast averaging is often effective because it reduces model-specific error and stabilizes predictions when no single model dominates in every part of the series.
+
+```{r}
+ensemble_pred <- (
+  as.numeric(fc_ets$mean) +
+  as.numeric(fc_arima$mean) +
+  as.numeric(fc_fourier$mean)
+) / 3
+
+mape_ensemble <- mape(valid$load_daily, ensemble_pred)
+mape_ensemble
+```
+
+The ensemble model achieved a validation MAPE of [INSERT ENSEMBLE MAPE]. This result [outperformed all individual models / performed competitively with the best individual model], indicating that combining complementary forecasts was an effective way to improve robustness.
+
+#Results Comparison
+Table 1 summarizes the validation performance of the five retained models.
+
+```{r}
+results_tbl <- tibble(
+  Model = c(
+    "ETS",
+    "ARIMA + Fourier",
+    "Ensemble",
+    "TBATS",
+    "STL + ETS"
+  ),
+  Validation_MAPE = c(
+    mape_ets,
+    mape_fourier,
+    mape_ensemble,
+    mape_tbats,
+    mape_stlf_ets
+  )
+) %>%
+  arrange(Validation_MAPE)
+
+kable(
+  results_tbl,
+  digits = 3,
+  caption = "Validation MAPE for the five retained forecasting models"
+) %>%
+  kable_styling(full_width = FALSE)
+```
+
+Overall, the results showed that [INSERT BEST MODEL NAME] produced the lowest validation MAPE, followed by [INSERT SECOND-BEST MODEL]. The baseline seasonal naive model provided a useful benchmark, but the best advanced models were able to improve upon that baseline by incorporating more flexible representations of serial dependence and seasonality.
+A key finding from this comparison was that model performance improved when the forecasting method more directly accounted for repeated seasonal structure. In particular, [INSERT SHORT INTERPRETATION, e.g., “the ARIMA-Fourier and ensemble approaches outperformed simpler methods because they better represented multiple seasonal cycles in the daily load series”].
+
+```{r export-all-kaggle-submissions}
+dir.create("../data_process/model_outputs", recursive = TRUE, showWarnings = FALSE)
+
+template <- readr::read_csv(
+  "../data_raw/submission_template.csv",
+  show_col_types = FALSE
+)
+
+date_col <- names(template)[tolower(names(template)) == "date"]
+if (length(date_col) == 0) {
+  stop("No 'date' column found in submission_template.csv")
+}
+value_col <- setdiff(names(template), date_col)[1]
+if (is.na(value_col) || length(value_col) == 0) {
+  stop("Could not identify forecast value column in submission_template.csv")
+}
+
+full_train <- daily_data %>%
+  dplyr::filter(date >= as.Date("2005-01-01"),
+                date <= as.Date("2011-06-30")) %>%
+  dplyr::arrange(date)
+
+h_final <- nrow(template)
+
+y_full_weekly <- ts(full_train$load_daily, frequency = 7)
+y_full_msts <- msts(full_train$load_daily, seasonal.periods = c(7, 365.25))
+
+# 1. ETS
+fit_ets_final <- ets(y_full_weekly)
+fc_ets_final <- forecast(fit_ets_final, h = h_final)
+
+# 2. STLF_ETS
+fc_stlf_ets_final <- stlf(
+  y_full_weekly,
+  h = h_final,
+  method = "ets",
+  lambda = "auto",
+  biasadj = TRUE
+)
+
+# 3. ARIMA + Fourier
+fit_fourier_final <- auto.arima(
+  y_full_msts,
+  xreg = fourier(y_full_msts, K = c(2, 5)),
+  seasonal = FALSE,
+  stepwise = FALSE,
+  approximation = FALSE
+)
+
+fc_fourier_final <- forecast(
+  fit_fourier_final,
+  xreg = fourier(y_full_msts, K = c(2, 5), h = h_final)
+)
+
+# 4. Ensemble
+fit_arima_final <- auto.arima(
+  y_full_weekly,
+  seasonal = TRUE,
+  stepwise = FALSE,
+  approximation = FALSE
+)
+fc_arima_final <- forecast(fit_arima_final, h = h_final)
+
+ensemble_final <- (
+  as.numeric(fc_ets_final$mean) +
+  as.numeric(fc_arima_final$mean) +
+  as.numeric(fc_fourier_final$mean)
+) / 3
+
+# 5. TBATS
+fit_tbats_final <- tbats(y_full_msts)
+fc_tbats_final <- forecast(fit_tbats_final, h = h_final)
+
+write_submission <- function(pred, file_name) {
+  submission <- template
+  submission[[value_col]] <- as.numeric(pred)
+
+  readr::write_csv(
+    submission,
+    file.path("../data_process/model_outputs", file_name)
+  )
+
+  submission
+}
+
+submission_ets <- write_submission(
+  fc_ets_final$mean,
+  "submission_ets.csv"
+)
+
+submission_stlf_ets <- write_submission(
+  fc_stlf_ets_final$mean,
+  "submission_stlf_ets.csv"
+)
+
+submission_arima_fourier <- write_submission(
+  fc_fourier_final$mean,
+  "submission_arima_fourier.csv"
+)
+
+submission_ensemble <- write_submission(
+  ensemble_final,
+  "submission_ensemble.csv"
+)
+
+submission_tbats <- write_submission(
+  fc_tbats_final$mean,
+  "submission_tbats.csv"
+)
+
+print(list.files("../data_process/model_outputs", pattern = "^submission_.*\\.csv$"))
+```
+
+#Final Forecasting Approach
+Based on the validation results, the final Kaggle submission was generated using [INSERT FINAL MODEL NAME]. After identifying the best-performing approach on the July 2010 validation period, the selected model was retrained using the full available dataset from 2005-01-01 through 2011-06-30. This ensured that the final submission used all historical information available before the July 2011 forecasting horizon.
+
+
+```{r}
+full_train <- daily_data %>%
+  filter(date >= as.Date("2005-01-01"),
+         date <= as.Date("2011-06-30"))
+
+y_full <- msts(full_train$load_daily, seasonal.periods = c(7, 365.25))
+template <- read_csv("../data_raw/submission_template.csv", show_col_types = FALSE)
+
+h_final <- nrow(template)
+
+# Replace this block with your chosen final model
+fit_final <- auto.arima(
+  y_full,
+  xreg = fourier(y_full, K = c(2, 5)),
+  seasonal = FALSE,
+  stepwise = FALSE,
+  approximation = FALSE
+)
+
+fc_final <- forecast(
+  fit_final,
+  xreg = fourier(y_full, K = c(2, 5), h = h_final)
+)
+
+submission <- template %>%
+  mutate(load = as.numeric(fc_final$mean))
+
+write_csv(submission, "../data_process/final_submission.csv")
+```
+
+The final submission file contained point forecasts for each day in July 2011 in the format required by the competition template. This file was then uploaded to Kaggle for scoring.
+
+#Discussion
+Several findings emerged from this forecasting exercise. First, even a simple seasonal naive benchmark provided a meaningful baseline because the daily electricity series exhibited strong weekly repetition. This reinforces the importance of comparing advanced models to a sensible benchmark rather than evaluating them in isolation.
+Second, methods that more flexibly represented autocorrelation and seasonality generally performed better than purely naive approaches. In particular, [INSERT BEST MODEL OR TOP 2 MODELS] showed that accounting for structured seasonal variation was important for short-horizon daily load forecasting.
+Third, combining forecasts through simple averaging improved stability in some cases. The ensemble model reduced the dependence on any one individual specification and offered a practical way to improve robustness when several models performed similarly well in validation.
+A limitation of this analysis is that the final report focused primarily on univariate demand dynamics, even though weather variables were available. While temperature and humidity may contain useful predictive information, their incorporation into a final competition submission depends on whether corresponding future weather inputs are available or forecasted consistently. Given the time constraints of the project, the final modeling strategy prioritized reliable demand-based time series methods that could be implemented and validated quickly.
+If additional time were available, future work could explore alternative seasonal parameterizations, more systematic hyperparameter tuning for the Fourier terms, and exogenous-regressor models based on temperature and humidity scenarios.
+
+#Conclusion
+This project developed and compared multiple forecasting models for daily residential electricity demand in July 2011. Starting from hourly observations, the data were aggregated to daily frequency and evaluated under a validation scheme consistent with the competition design. Across the five retained models, [INSERT BEST MODEL NAME] delivered the strongest validation performance and was therefore selected for final retraining and Kaggle submission.
+Overall, the results demonstrated that forecasting accuracy improved when the modeling framework explicitly addressed recurring seasonal structure in the daily load series. The final workflow was reproducible, interpretable, and aligned with the requirements of the forecasting competition.
+
+#AI Use Disclosure
+AI tools were used in a limited supporting role during this project. Specifically, they were used to help refine code organization, improve the clarity and style of written report sections, and assist with debugging and formatting in R Markdown. All preprocessing choices, model selection decisions, validation design, interpretation of results, and final submission outputs were reviewed and verified by the authors.
