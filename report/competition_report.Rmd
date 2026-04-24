@@ -1,19 +1,16 @@
 ---
 title: "Xu_Zhu_CompetitionReport_S26"
-author: "Lauren Xu, Patrick Zhu"
-date: "`r Sys.Date()`"
-output:
-  pdf_document:
-    latex_engine: pdflatex
+author: "Lauren Xu and Patrick Zhu"
+date: "2026-04-24"
+output: pdf_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup}
 knitr::opts_chunk$set(
-  echo = TRUE,
-  warning = FALSE,
-  message = FALSE
+	message = FALSE,
+	warning = FALSE,
+	include = FALSE
 )
-
 library(tidyverse)
 library(lubridate)
 library(readr)
@@ -23,7 +20,6 @@ library(knitr)
 library(kableExtra)
 ```
 
----
 # Introduction
 
 The objective of this forecasting competition was to predict daily residential electricity demand for July 2011 using historical electricity load data. The original competition data were provided at an hourly frequency and also included nearby weather observations, including temperature and relative humidity. Although these weather variables were available, the final modeling workflow focused on demand-based time series forecasting methods using the aggregated daily electricity load series.
@@ -34,17 +30,13 @@ Five models were retained in the final report: ETS, STL with ETS, ARIMA with Fou
 
 The primary goal of the analysis was to improve on simpler benchmark forecasting methods while developing a workflow that was transparent, reproducible, and consistent with the competition requirements.
 
----
-
 # GitHub Repository
 
 The complete code, intermediate outputs, submission files, and report materials for this project are available in the team GitHub repository:
 
-**https://github.com/Pat-Zhu/Forecasting_Competition.git**
+[**https://github.com/Pat-Zhu/Forecasting_Competition.git**](https://github.com/Pat-Zhu/Forecasting_Competition.git){.uri}
 
 The repository includes the R Markdown report, data preprocessing code, candidate forecasting models, Kaggle submission files, and final report materials.
-
----
 
 # Data and Preprocessing
 
@@ -61,6 +53,7 @@ daily_data <- read_csv("../data_process/daily_data.csv") %>%
 
 head(daily_data)
 ```
+
 The preprocessing step was necessary to ensure that all candidate models were trained and evaluated using the same daily load series. This made the validation results and final Kaggle submissions directly comparable across models.
 
 # Validation Strategy
@@ -106,6 +99,7 @@ mape_tbats
 The TBATS model achieved a validation MAPE of 11.342. Although it did not produce the lowest validation MAPE among the retained models, it performed competitively during validation and produced the best Kaggle leaderboard score among the final submitted models, with a Kaggle score of 0.0998. For this reason, TBATS was selected as the final forecasting model.
 
 ## 2. ETS Model
+
 The ETS model was used to capture level, trend, and seasonal components through exponential smoothing. This class of models is widely used in applied forecasting because it is flexible, interpretable, and can adapt to changing patterns in the series over time. In this project, the ETS model provided a strong smoothing-based comparison against the more complex seasonal models.
 
 ```{r}
@@ -118,6 +112,7 @@ mape_ets
 The ETS model produced a validation MAPE of 11.762. Its validation performance was close to TBATS and the ensemble model, indicating that exponential smoothing captured much of the dominant structure in the daily load series. On Kaggle, ETS also performed strongly, with a score of 0.1004, which was the second-best Kaggle score among the retained submissions.
 
 ## 3. STLF_ETS
+
 The STL with ETS approach was used to decompose the daily load series into seasonal and nonseasonal components before applying exponential smoothing to the seasonally adjusted series. This approach is useful when a time series contains a clear seasonal pattern that can be separated from the remaining trend and irregular components. Because the model was fitted using a weekly ts() object, the STL decomposition focused on the weekly seasonal structure in daily electricity demand.
 
 ```{r}
@@ -138,6 +133,7 @@ mape_stlf_ets
 The STL with ETS model achieved a validation MAPE of 15.444, which was higher than the other retained models. This suggests that modeling the weekly seasonal pattern alone was not sufficient to capture the full structure of the daily load series during the validation period. However, its Kaggle score was 0.1047, which was still competitive and better than several other submitted alternatives.
 
 ## 4. ARIMA with Fourier Terms
+
 To better represent multiple seasonal patterns, an ARIMA model with Fourier terms was also considered. Fourier terms provide a parsimonious way to model recurring cycles without requiring a large number of seasonal parameters. This is especially useful for daily demand data, where both weekly and longer-term seasonal variation may be present.
 
 ```{r}
@@ -161,6 +157,7 @@ mape_fourier
 The ARIMA with Fourier terms model obtained a validation MAPE of 10.946, which was the lowest validation MAPE among the five retained models. This result suggests that the Fourier terms helped represent the recurring seasonal structure in the daily load series effectively. Its Kaggle score was 0.1022, which was also competitive, although it was slightly worse than the Kaggle scores from TBATS and ETS.
 
 ## 5. Ensemble Model
+
 The final candidate model was a simple ensemble created by averaging forecasts from ETS, a seasonal ARIMA model, and ARIMA with Fourier terms. Forecast averaging can improve robustness by reducing dependence on a single model specification. Even when one individual model performs best during validation, an ensemble may provide more stable forecasts if the component models capture different aspects of the series.
 
 ```{r}
@@ -185,8 +182,7 @@ mape_ensemble
 
 The ensemble model achieved a validation MAPE of 11.494. This was slightly higher than the ARIMA with Fourier terms model and TBATS, but it remained competitive with the best individual models. On Kaggle, the ensemble submission received a score of 0.1128. Although the ensemble improved robustness by combining several forecasting approaches, it did not outperform the strongest individual models in the final leaderboard results.
 
-#Results Comparison
-Table 1 summarizes the validation performance of the five retained models.
+#Results Comparison Table 1 summarizes the validation performance of the five retained models.
 
 ```{r}
 results_tbl <- tibble(
